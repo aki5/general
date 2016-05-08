@@ -4,6 +4,7 @@ LDFLAGS=-Llib
 
 all: generalstore
 
+include libssl.mk
 include libevent.mk
 
 generalstore: main.o $(LIBEVENT_LIBS)
@@ -13,8 +14,8 @@ clean:
 	rm -rf generalstore *.o
 
 distclean: clean
-	rm -rf lib bin include
+	rm -rf lib bin include share ssl
+	make -C openssl clean
 	make -C libevent distclean
-
 
 main.o: $(LIBEVENT_HFILES)
