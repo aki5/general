@@ -2,3 +2,7 @@
 	path = libevent
 	url = https://github.com/libevent/libevent.git
 	branch = release-2.0.22-stable
+[submodule "openssl"]
+	path = openssl
+	url = https://github.com/openssl/openssl.git
+	branch = OpenSSL_1_0_2-stable
