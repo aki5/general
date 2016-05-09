@@ -6,3 +6,6 @@
 	path = openssl
 	url = https://github.com/openssl/openssl.git
 	branch = OpenSSL_1_0_2-stable
+[submodule "libevhtp"]
+	path = libevhtp
+	url = https://github.com/ellzey/libevhtp.git
