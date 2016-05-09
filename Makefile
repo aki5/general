@@ -15,7 +15,7 @@ clean:
 
 distclean: clean
 	rm -rf lib bin include share ssl
-	make -C openssl clean
+	make -C openssl clean && rm openssl/Makefile
 	make -C libevent distclean
 
 main.o: $(LIBEVENT_HFILES)

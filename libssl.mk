@@ -78,12 +78,13 @@ LIBSSL_HFILES=\
 	include/openssl/x509_vfy.h\
 	include/openssl/x509v3.h\
 
-openssl/Makefile: openssl/config
-	cd openssl && ./config no-shared no-dso no-ssl2 --prefix=$(CURDIR)
+#openssl/Makefile: openssl/config
+#	cd openssl && ./config no-shared no-dso --prefix=$(CURDIR)
 
-#openssl/Makefile: openssl/Configure
-#	cd openssl && ./Configure no-shared no-dso --prefix=$(CURDIR) darwin64-x86_64-cc
+openssl/Makefile: openssl/Configure
+	cd openssl && ./Configure no-shared no-dso --prefix=$(CURDIR) darwin64-x86_64-cc
+	#cd openssl && ./Configure no-shared no-dso --prefix=$(CURDIR) darwin64-x86_64-cc
 
-lib/libssl.a lib/libcrypto.a: $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
+$(LIBSSL_LIBS) $(LIBSSL_HFILES): $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
 	make -C openssl install
 
