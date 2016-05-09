@@ -6,4 +6,4 @@ addons:
       - cmake
       - cmake-data
 
-script: make 
+script: make test

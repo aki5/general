@@ -80,7 +80,6 @@ LIBSSL_HFILES=\
 	include/openssl/x509_vfy.h\
 	include/openssl/x509v3.h\
 
-UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
 
@@ -94,6 +93,6 @@ openssl/Makefile: openssl/Configure
 
 endif
 
-$(LIBSSL_LIBS) $(LIBSSL_HFILES): $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
+bin/openssl $(LIBSSL_LIBS) $(LIBSSL_HFILES): $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
 	make -C openssl install
 
