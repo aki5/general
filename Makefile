@@ -21,4 +21,4 @@ distclean: clean
 	make -C openssl clean && rm openssl/Makefile
 	make -C libevent distclean
 
-main.o: $(LIBEVENT_HFILES) $(LIBSSL_HFILES)
+main.o: $(LIBEVHTP_HFILES) $(LIBEVENT_HFILES) $(LIBSSL_HFILES)

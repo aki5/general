@@ -2,12 +2,16 @@
 LIBEVHTP_LIBS=\
 	lib/libevhtp.a\
 
-libevhtp/build/Makefile: $(LIBEVENT_LIBS)
-	cd libevhtp/build && CMAKE_LIBRARY_PATH=$(CURDIR)/lib CMAKE_INCLUDE_PATH=$(CURDIR)/include cmake ..
+LIBEVHTP_HFILES=\
+	include/evhtp/evhtp.h\
+	include/evhtp/htparse.h\
+	include/evhtp/evhtp-config.h\
+	include/evhtp/evthr.h\
+	include/evhtp/onigposix.h\
 
-libevhtp/build/libevhtp.a: libevhtp/build/Makefile
-	make -C libevhtp/build
+libevhtp/build/Makefile: $(LIBEVENT_HFILES) $(LIBEVENT_LIBS)
+	cd libevhtp/build && cmake -DCMAKE_LIBRARY_PATH=$(CURDIR)/lib -DCMAKE_INSTALL_PREFIX=$(CURDIR) ..
 
-$(LIBEVHTP_LIBS): libevhtp/build/libevhtp.a
-	cp libevhtp/build/libevhtp.a lib/libevhtp.a
-
+$(LIBEVHTP_LIBS) $(LIBEVHTP_HFILES): libevhtp/build/Makefile
+	make -C libevhtp/build install
+	touch -c $(LIBEVHTP_LIBS) $(LIBEVHTP_HFILES)

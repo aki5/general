@@ -45,4 +45,4 @@ libevent/Makefile: libevent/configure
 
 $(LIBEVENT_LIBS) $(LIBEVENT_HFILES): $(shell find libevent -type f -name '*.[ch]') libevent/Makefile $(LIBSSL_LIBS) $(LIBSSL_HFILES)
 	make -C libevent install CPPFLAGS=-I$(CURDIR)/include LDFLAGS=-L$(CURDIR)/lib
-
+	touch -c $(LIBEVENT_LIBS) $(LIBEVENT_HFILES)
