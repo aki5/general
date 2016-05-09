@@ -33,7 +33,6 @@ LIBEVENT_HFILES=\
 	include/event2/tag_compat.h\
 	include/event2/thread.h\
 	include/event2/util.h\
-	include/event2/visibility.h\
 	include/evhttp.h\
 	include/evrpc.h\
 	include/evutil.h\
