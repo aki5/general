@@ -8,7 +8,6 @@ LIBSSL_HFILES=\
 	include/openssl/asn1.h\
 	include/openssl/asn1_mac.h\
 	include/openssl/asn1t.h\
-	include/openssl/async.h\
 	include/openssl/bio.h\
 	include/openssl/blowfish.h\
 	include/openssl/bn.h\
@@ -21,10 +20,11 @@ LIBSSL_HFILES=\
 	include/openssl/conf.h\
 	include/openssl/conf_api.h\
 	include/openssl/crypto.h\
-	include/openssl/ct.h\
 	include/openssl/des.h\
+	include/openssl/des_old.h\
 	include/openssl/dh.h\
 	include/openssl/dsa.h\
+	include/openssl/dso.h\
 	include/openssl/dtls1.h\
 	include/openssl/e_os2.h\
 	include/openssl/ebcdic.h\
@@ -36,9 +36,9 @@ LIBSSL_HFILES=\
 	include/openssl/evp.h\
 	include/openssl/hmac.h\
 	include/openssl/idea.h\
-	include/openssl/kdf.h\
+	include/openssl/krb5_asn.h\
+	include/openssl/kssl.h\
 	include/openssl/lhash.h\
-	include/openssl/md2.h\
 	include/openssl/md4.h\
 	include/openssl/md5.h\
 	include/openssl/mdc2.h\
@@ -53,10 +53,10 @@ LIBSSL_HFILES=\
 	include/openssl/pem2.h\
 	include/openssl/pkcs12.h\
 	include/openssl/pkcs7.h\
+	include/openssl/pqueue.h\
 	include/openssl/rand.h\
 	include/openssl/rc2.h\
 	include/openssl/rc4.h\
-	include/openssl/rc5.h\
 	include/openssl/ripemd.h\
 	include/openssl/rsa.h\
 	include/openssl/safestack.h\
@@ -66,6 +66,7 @@ LIBSSL_HFILES=\
 	include/openssl/srtp.h\
 	include/openssl/ssl.h\
 	include/openssl/ssl2.h\
+	include/openssl/ssl23.h\
 	include/openssl/ssl3.h\
 	include/openssl/stack.h\
 	include/openssl/symhacks.h\
@@ -73,17 +74,25 @@ LIBSSL_HFILES=\
 	include/openssl/ts.h\
 	include/openssl/txt_db.h\
 	include/openssl/ui.h\
+	include/openssl/ui_compat.h\
 	include/openssl/whrlpool.h\
 	include/openssl/x509.h\
 	include/openssl/x509_vfy.h\
 	include/openssl/x509v3.h\
 
-#openssl/Makefile: openssl/config
-#	cd openssl && ./config no-shared no-dso --prefix=$(CURDIR)
+UNAME := $(shell uname)
+
+ifeq ($(UNAME),Darwin)
 
 openssl/Makefile: openssl/Configure
-	cd openssl && ./Configure no-shared no-dso --prefix=$(CURDIR) darwin64-x86_64-cc
-	#cd openssl && ./Configure no-shared no-dso --prefix=$(CURDIR) darwin64-x86_64-cc
+	cd openssl && ./Configure no-shared no-dso no-ssl2 --prefix=$(CURDIR) darwin64-x86_64-cc
+
+else
+
+openssl/Makefile: openssl/Configure
+	cd openssl && ./config no-shared no-dso no-ssl2 --prefix=$(CURDIR)
+
+endif
 
 $(LIBSSL_LIBS) $(LIBSSL_HFILES): $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
 	make -C openssl install

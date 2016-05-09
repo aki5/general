@@ -7,8 +7,8 @@ all: generalstore
 include libssl.mk
 include libevent.mk
 
-generalstore: main.o $(LIBEVENT_LIBS)
-	$(CC) $(LDFLAGS) -o $@ main.o -levent
+generalstore: main.o $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+	$(CC) $(LDFLAGS) -o $@ main.o -levent -levent_openssl -lssl -lcrypto
 
 clean:
 	rm -rf generalstore *.o
@@ -18,4 +18,4 @@ distclean: clean
 	make -C openssl clean && rm openssl/Makefile
 	make -C libevent distclean
 
-main.o: $(LIBEVENT_HFILES)
+main.o: $(LIBEVENT_HFILES) $(LIBSSL_HFILES)

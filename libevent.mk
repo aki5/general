@@ -44,6 +44,6 @@ libevent/configure: libevent/autogen.sh
 libevent/Makefile: libevent/configure
 	cd libevent && ./configure --prefix=$(CURDIR) --disable-shared
 
-$(LIBEVENT_LIBS) $(LIBEVENT_HFILES): $(shell find libevent -type f -name '*.[ch]') $(LIBSSL_HFILES) $(LIBSSL_LIBS) libevent/Makefile
+$(LIBEVENT_LIBS) $(LIBEVENT_HFILES): $(shell find libevent -type f -name '*.[ch]') libevent/Makefile $(LIBSSL_LIBS) $(LIBSSL_HFILES)
 	make -C libevent install CPPFLAGS=-I$(CURDIR)/include LDFLAGS=-L$(CURDIR)/lib
 

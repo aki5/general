@@ -1,26 +1,39 @@
+/* Derived from sample/http-server.c in libevent source tree.
+ * That file does not have a license notice, but generally libevent
+ * is under the 3-clause BSD.
+ *
+ * Plus, some additional inspiration from:
+ * http://archives.seul.org/libevent/users/Jul-2010/binGK8dlinMqP.bin
+ * (which is a .c file despite the extension and mime type) */
+
 /*
-  A trivial static http webserver using Libevent's evhttp.
+  A trivial https webserver using Libevent's evhttp.
 
   This is not the best code in the world, and it does some fairly stupid stuff
   that you would never want to do in a production webserver. Caveat hackor!
 
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
+
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
+#include <event2/bufferevent.h>
+#include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
 #include <event2/http.h>
 #include <event2/buffer.h>
@@ -29,322 +42,279 @@
 
 #include <netinet/in.h>
 
-char uri_root[512];
 
-static const struct table_entry {
-	const char *extension;
-	const char *content_type;
-} content_type_table[] = {
-	{ "txt", "text/plain" },
-	{ "c", "text/plain" },
-	{ "h", "text/plain" },
-	{ "html", "text/html" },
-	{ "htm", "text/htm" },
-	{ "css", "text/css" },
-	{ "gif", "image/gif" },
-	{ "jpg", "image/jpeg" },
-	{ "jpeg", "image/jpeg" },
-	{ "png", "image/png" },
-	{ "pdf", "application/pdf" },
-	{ "ps", "application/postsript" },
-	{ NULL, NULL },
-};
-
-/* Try to guess a good content-type for 'path' */
-static const char *
-guess_content_type(const char *path)
+void
+openssl_fatal(const char *func)
 {
-	const char *last_period, *extension;
-	const struct table_entry *ent;
-	last_period = strrchr(path, '.');
-	if (!last_period || strchr(last_period, '/'))
-		goto not_found; /* no exension */
-	extension = last_period + 1;
-	for (ent = &content_type_table[0]; ent->extension; ++ent) {
-		if (!evutil_ascii_strcasecmp(ent->extension, extension))
-			return ent->content_type;
-	}
-
-not_found:
-	return "application/misc";
+	fprintf (stderr, "%s failed:\n", func);
+	/* This is the OpenSSL function that prints the contents of the
+	* error stack to the specified file handle. */
+	ERR_print_errors_fp (stderr);
+	exit (EXIT_FAILURE);
 }
 
-/* Callback used for the /dump URI, and for every non-GET request:
- * dumps all information to stdout and gives back a trivial 200 ok */
-static void
-dump_request_cb(struct evhttp_request *req, void *arg)
+void
+fatal(const char *fmt, ...)
 {
-	const char *cmdtype;
-	struct evkeyvalq *headers;
-	struct evkeyval *header;
-	struct evbuffer *buf;
-
-	switch (evhttp_request_get_command(req)) {
-	case EVHTTP_REQ_GET: cmdtype = "GET"; break;
-	case EVHTTP_REQ_POST: cmdtype = "POST"; break;
-	case EVHTTP_REQ_HEAD: cmdtype = "HEAD"; break;
-	case EVHTTP_REQ_PUT: cmdtype = "PUT"; break;
-	case EVHTTP_REQ_DELETE: cmdtype = "DELETE"; break;
-	case EVHTTP_REQ_OPTIONS: cmdtype = "OPTIONS"; break;
-	case EVHTTP_REQ_TRACE: cmdtype = "TRACE"; break;
-	case EVHTTP_REQ_CONNECT: cmdtype = "CONNECT"; break;
-	case EVHTTP_REQ_PATCH: cmdtype = "PATCH"; break;
-	default: cmdtype = "unknown"; break;
-	}
-
-	printf("Received a %s request for %s\nHeaders:\n",
-	    cmdtype, evhttp_request_get_uri(req));
-
-	headers = evhttp_request_get_input_headers(req);
-	for (header = headers->tqh_first; header;
-	    header = header->next.tqe_next) {
-		printf("  %s: %s\n", header->key, header->value);
-	}
-
-	buf = evhttp_request_get_input_buffer(req);
-	puts("Input data: <<<");
-	while (evbuffer_get_length(buf)) {
-		int n;
-		char cbuf[128];
-		n = evbuffer_remove(buf, cbuf, sizeof(cbuf));
-		if (n > 0)
-			(void) fwrite(cbuf, 1, n, stdout);
-	}
-	puts(">>>");
-
-	evhttp_send_reply(req, 200, "OK", NULL);
+	va_list ap;
+	va_start (ap, fmt);
+	vfprintf (stderr, fmt, ap);
+	va_end (ap);
+	exit (EXIT_FAILURE);
 }
+
+/* OpenSSL has a habit of using uninitialized memory.  (They turn up their
+ * nose at tools like valgrind.)  To avoid spurious valgrind errors (as well
+ * as to allay any concerns that the uninitialized memory is actually
+ * affecting behavior), let's install a custom malloc function which is
+ * actually calloc.
+ */
+static void *my_zeroing_malloc (size_t howmuch)
+{ return calloc (1, howmuch); }
+
+void
+common_setup (void)
+{
+	signal (SIGPIPE, SIG_IGN);
+	CRYPTO_set_mem_functions (my_zeroing_malloc, realloc, free);
+	SSL_library_init ();
+	SSL_load_error_strings ();
+	OpenSSL_add_all_algorithms ();
+	fprintf(stderr, "Using OpenSSL version \"%s\"\nand libevent version \"%s\"\n",
+		SSLeay_version (SSLEAY_VERSION),
+		event_get_version ());
+}
+
+unsigned short serverPort = 8881;
+
+/* Instead of casting between these types, create a union with all of them,
+ * to avoid -Wstrict-aliasing warnings. */
+typedef union {
+	struct sockaddr_storage ss;
+	struct sockaddr sa;
+	struct sockaddr_in in;
+	struct sockaddr_in6 i6;
+} sock_hop;
+
 
 /* This callback gets invoked when we get any http request that doesn't match
  * any other callback.  Like any evhttp server callback, it has a simple job:
  * it must eventually call evhttp_send_error() or evhttp_send_reply().
  */
 static void
-send_document_cb(struct evhttp_request *req, void *arg)
+send_document_cb (struct evhttp_request *req, void *arg)
 {
-	struct evbuffer *evb = NULL;
-	const char *docroot = arg;
-	const char *uri = evhttp_request_get_uri(req);
-	struct evhttp_uri *decoded = NULL;
-	const char *path;
-	char *decoded_path;
-	char *whole_path = NULL;
-	size_t len;
-	int fd = -1;
-	struct stat st;
+struct evbuffer *evb = NULL;
+  const char *uri = evhttp_request_get_uri (req);
+  struct evhttp_uri *decoded = NULL;
 
-	if (evhttp_request_get_command(req) != EVHTTP_REQ_GET) {
-		dump_request_cb(req, arg);
-		return;
-	}
+  if (evhttp_request_get_command (req) == EVHTTP_REQ_GET)
+    {
+      struct evbuffer *buf = evbuffer_new();
+      if (buf == NULL) return;
+      evbuffer_add_printf(buf, "Requested: %s\n", uri);
+      evhttp_send_reply(req, HTTP_OK, "OK", buf);
+      return;
+    }
 
-	printf("Got a GET request for <%s>\n",  uri);
+  /* We only handle POST requests. */
+  if (evhttp_request_get_command (req) != EVHTTP_REQ_POST)
+    { evhttp_send_reply (req, 200, "OK", NULL);
+      return;
+    }
 
-	/* Decode the URI */
-	decoded = evhttp_uri_parse(uri);
-	if (!decoded) {
-		printf("It's not a good URI. Sending BADREQUEST\n");
-		evhttp_send_error(req, HTTP_BADREQUEST, 0);
-		return;
-	}
+  printf ("Got a POST request for <%s>\n", uri);
 
-	/* Let's see what path the user asked for. */
-	path = evhttp_uri_get_path(decoded);
-	if (!path) path = "/";
+  /* Decode the URI */
+  decoded = evhttp_uri_parse (uri);
+  if (! decoded)
+    { printf ("It's not a good URI. Sending BADREQUEST\n");
+      evhttp_send_error (req, HTTP_BADREQUEST, 0);
+      return;
+    }
 
-	/* We need to decode it, to see what path the user really wanted. */
-	decoded_path = evhttp_uridecode(path, 0, NULL);
-	if (decoded_path == NULL)
-		goto err;
-	/* Don't allow any ".."s in the path, to avoid exposing stuff outside
-	 * of the docroot.  This test is both overzealous and underzealous:
-	 * it forbids aceptable paths like "/this/one..here", but it doesn't
-	 * do anything to prevent symlink following." */
-	if (strstr(decoded_path, ".."))
-		goto err;
+  /* Decode the payload */
+  struct evkeyvalq kv;
+  memset (&kv, 0, sizeof (kv));
+  struct evbuffer *buf = evhttp_request_get_input_buffer (req);
+  evbuffer_add (buf, "", 1);    /* NUL-terminate the buffer */
+  char *payload = (char *) evbuffer_pullup (buf, -1);
+  if (0 != evhttp_parse_query_str (payload, &kv))
+    { printf ("Malformed payload. Sending BADREQUEST\n");
+      evhttp_send_error (req, HTTP_BADREQUEST, 0);
+      return;
+    }
 
-	len = strlen(decoded_path)+strlen(docroot)+2;
-	if (!(whole_path = malloc(len))) {
-		perror("malloc");
-		goto err;
-	}
-	evutil_snprintf(whole_path, len, "%s/%s", docroot, decoded_path);
+  /* Determine peer */
+  char *peer_addr;
+  ev_uint16_t peer_port;
+  struct evhttp_connection *con = evhttp_request_get_connection (req);
+  evhttp_connection_get_peer (con, &peer_addr, &peer_port);
 
-	if (stat(whole_path, &st)<0) {
-		goto err;
-	}
+  /* Extract passcode */
+  const char *passcode = evhttp_find_header (&kv, "passcode");
+  char response[256];
+  evutil_snprintf (response, sizeof (response),
+                   "Hi %s!  I %s your passcode.\n", peer_addr,
+                   (0 == strcmp (passcode, "r23")
+                    ?  "liked"
+                    :  "didn't like"));
+  evhttp_clear_headers (&kv);   /* to free memory held by kv */
 
-	/* This holds the content we're sending. */
-	evb = evbuffer_new();
+  /* This holds the content we're sending. */
+  evb = evbuffer_new ();
 
-	if (S_ISDIR(st.st_mode)) {
-		/* If it's a directory, read the comments and make a little
-		 * index page */
+  evhttp_add_header (evhttp_request_get_output_headers (req),
+                     "Content-Type", "application/x-yaml");
+  evbuffer_add (evb, response, strlen (response));
 
-		DIR *d;
-		struct dirent *ent;
-		const char *trailing_slash = "";
+  evhttp_send_reply (req, 200, "OK", evb);
 
-		if (!strlen(path) || path[strlen(path)-1] != '/')
-			trailing_slash = "/";
-
-
-		if (!(d = opendir(whole_path)))
-			goto err;
-
-		evbuffer_add_printf(evb,
-                    "<!DOCTYPE html>\n"
-                    "<html>\n <head>\n"
-                    "  <meta charset='utf-8'>\n"
-		    "  <title>%s</title>\n"
-		    "  <base href='%s%s'>\n"
-		    " </head>\n"
-		    " <body>\n"
-		    "  <h1>%s</h1>\n"
-		    "  <ul>\n",
-		    decoded_path, /* XXX html-escape this. */
-		    path, /* XXX html-escape this? */
-		    trailing_slash,
-		    decoded_path /* XXX html-escape this */);
-
-		while ((ent = readdir(d))) {
-			const char *name = ent->d_name;
-			evbuffer_add_printf(evb,
-			    "    <li><a href=\"%s\">%s</a>\n",
-			    name, name);/* XXX escape this */
-
-		}
-		evbuffer_add_printf(evb, "</ul></body></html>\n");
-
-		closedir(d);
-		evhttp_add_header(evhttp_request_get_output_headers(req),
-		    "Content-Type", "text/html");
-	} else {
-		/* Otherwise it's a file; add it to the buffer to get
-		 * sent via sendfile */
-		const char *type = guess_content_type(decoded_path);
-		if ((fd = open(whole_path, O_RDONLY)) < 0) {
-			perror("open");
-			goto err;
-		}
-
-		if (fstat(fd, &st)<0) {
-			/* Make sure the length still matches, now that we
-			 * opened the file :/ */
-			perror("fstat");
-			goto err;
-		}
-		evhttp_add_header(evhttp_request_get_output_headers(req),
-		    "Content-Type", type);
-		evbuffer_add_file(evb, fd, 0, st.st_size);
-	}
-
-	evhttp_send_reply(req, 200, "OK", evb);
-	goto done;
-err:
-	evhttp_send_error(req, 404, "Document was not found");
-	if (fd>=0)
-		close(fd);
-done:
-	if (decoded)
-		evhttp_uri_free(decoded);
-	if (decoded_path)
-		free(decoded_path);
-	if (whole_path)
-		free(whole_path);
-	if (evb)
-		evbuffer_free(evb);
+  if (decoded)
+    evhttp_uri_free (decoded);
+  if (evb)
+    evbuffer_free (evb);
 }
 
-static void
-syntax(void)
-{
-	fprintf(stdout, "Syntax: http-server <docroot>\n");
+/**
+ * This callback is responsible for creating a new SSL connection
+ * and wrapping it in an OpenSSL bufferevent.  This is the way
+ * we implement an https server instead of a plain old http server.
+ */
+static struct bufferevent* bevcb (struct event_base *base, void *arg)
+{ struct bufferevent* r;
+  SSL_CTX *ctx = (SSL_CTX *) arg;
+
+  r = bufferevent_openssl_socket_new (base,
+                                      -1,
+                                      SSL_new (ctx),
+                                      BUFFEREVENT_SSL_ACCEPTING,
+                                      BEV_OPT_CLOSE_ON_FREE);
+  return r;
+}
+
+static void server_setup_certs (SSL_CTX *ctx,
+                                const char *certificate_chain,
+                                const char *private_key)
+{ fprintf (stderr, "Loading certificate chain from '%s'\n"
+               "and private key from '%s'\n",
+               certificate_chain, private_key);
+
+  if (1 != SSL_CTX_use_certificate_chain_file (ctx, certificate_chain))
+    openssl_fatal ("SSL_CTX_use_certificate_chain_file");
+
+  if (1 != SSL_CTX_use_PrivateKey_file (ctx, private_key, SSL_FILETYPE_PEM))
+    openssl_fatal ("SSL_CTX_use_PrivateKey_file");
+
+  if (1 != SSL_CTX_check_private_key (ctx))
+    openssl_fatal ("SSL_CTX_check_private_key");
+}
+
+static int serve_some_http (void)
+{ struct event_base *base;
+  struct evhttp *http;
+  struct evhttp_bound_socket *handle;
+
+
+  base = event_base_new ();
+  if (! base)
+    { fprintf (stderr, "Couldn't create an event_base: exiting\n");
+      return 1;
+    }
+
+  /* Create a new evhttp object to handle requests. */
+  http = evhttp_new (base);
+  if (! http)
+    { fprintf (stderr, "couldn't create evhttp. Exiting.\n");
+      return 1;
+    }
+
+  SSL_CTX *ctx = SSL_CTX_new (SSLv23_server_method ());
+  SSL_CTX_set_options (ctx,
+                       SSL_OP_SINGLE_DH_USE |
+                       SSL_OP_SINGLE_ECDH_USE |
+                       SSL_OP_NO_SSLv2);
+
+  /* Cheesily pick an elliptic curve to use with elliptic curve ciphersuites.
+   * We just hardcode a single curve which is reasonably decent.
+   * See http://www.mail-archive.com/openssl-dev@openssl.org/msg30957.html */
+  EC_KEY *ecdh = EC_KEY_new_by_curve_name (NID_X9_62_prime256v1);
+  if (! ecdh)
+    openssl_fatal ("EC_KEY_new_by_curve_name");
+  if (1 != SSL_CTX_set_tmp_ecdh (ctx, ecdh))
+    openssl_fatal ("SSL_CTX_set_tmp_ecdh");
+
+  /* Find and set up our server certificate. */
+  const char *certificate_chain = "server-certificate-chain.pem";
+  const char *private_key = "server-private-key.pem";
+  server_setup_certs (ctx, certificate_chain, private_key);
+
+  /* This is the magic that lets evhttp use SSL. */
+  evhttp_set_bevcb (http, bevcb, ctx);
+
+  /* This is the callback that gets called when a request comes in. */
+  evhttp_set_gencb (http, send_document_cb, NULL);
+
+  /* Now we tell the evhttp what port to listen on */
+  handle = evhttp_bind_socket_with_handle (http, "0.0.0.0", serverPort);
+  if (! handle)
+    { fprintf (stderr, "couldn't bind to port %d. Exiting.\n",
+               (int) serverPort);
+      return 1;
+    }
+
+  { /* Extract and display the address we're listening on. */
+    sock_hop ss;
+    evutil_socket_t fd;
+    ev_socklen_t socklen = sizeof (ss);
+    char addrbuf[128];
+    void *inaddr;
+    const char *addr;
+    int got_port = -1;
+    fd = evhttp_bound_socket_get_fd (handle);
+    memset (&ss, 0, sizeof(ss));
+    if (getsockname (fd, &ss.sa, &socklen))
+      { perror ("getsockname() failed");
+        return 1;
+      }
+    if (ss.ss.ss_family == AF_INET)
+      { got_port = ntohs (ss.in.sin_port);
+        inaddr = &ss.in.sin_addr;
+      }
+    else if (ss.ss.ss_family == AF_INET6)
+      { got_port = ntohs (ss.i6.sin6_port);
+        inaddr = &ss.i6.sin6_addr;
+      }
+    else
+      { fprintf (stderr, "Weird address family %d\n", ss.ss.ss_family);
+        return 1;
+      }
+    addr = evutil_inet_ntop (ss.ss.ss_family, inaddr, addrbuf,
+                             sizeof (addrbuf));
+    if (addr)
+      printf ("Listening on %s:%d\n", addr, got_port);
+    else
+      { fprintf (stderr, "evutil_inet_ntop failed\n");
+        return 1;
+      }
+  }
+
+  event_base_dispatch (base);
+
+  /* not reached; runs forever */
+
+  return 0;
 }
 
 int
-main(int argc, char **argv)
+main(int argc, char *argv[])
 {
-	struct event_base *base;
-	struct evhttp *http;
-	struct evhttp_bound_socket *handle;
+	common_setup ();              /* Initialize OpenSSL */
 
-	unsigned short port = 0;
-
-	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
-		return (1);
-	if (argc < 2) {
-		syntax();
-		return 1;
+	if (argc > 1) {
+		serverPort = strtol(argv[1], NULL, 0);
 	}
 
-	base = event_base_new();
-	if (!base) {
-		fprintf(stderr, "Couldn't create an event_base: exiting\n");
-		return 1;
-	}
-
-	/* Create a new evhttp object to handle requests. */
-	http = evhttp_new(base);
-	if (!http) {
-		fprintf(stderr, "couldn't create evhttp. Exiting.\n");
-		return 1;
-	}
-
-	/* The /dump URI will dump all requests to stdout and say 200 ok. */
-	evhttp_set_cb(http, "/dump", dump_request_cb, NULL);
-
-	/* We want to accept arbitrary requests, so we need to set a "generic"
-	 * cb.  We can also add callbacks for specific paths. */
-	evhttp_set_gencb(http, send_document_cb, argv[1]);
-
-	/* Now we tell the evhttp what port to listen on */
-	handle = evhttp_bind_socket_with_handle(http, "0.0.0.0", port);
-	if (!handle) {
-		fprintf(stderr, "couldn't bind to port %d. Exiting.\n",
-		    (int)port);
-		return 1;
-	}
-
-	{
-		/* Extract and display the address we're listening on. */
-		struct sockaddr_storage ss;
-		evutil_socket_t fd;
-		ev_socklen_t socklen = sizeof(ss);
-		char addrbuf[128];
-		void *inaddr;
-		const char *addr;
-		int got_port = -1;
-		fd = evhttp_bound_socket_get_fd(handle);
-		memset(&ss, 0, sizeof(ss));
-		if (getsockname(fd, (struct sockaddr *)&ss, &socklen)) {
-			perror("getsockname() failed");
-			return 1;
-		}
-		if (ss.ss_family == AF_INET) {
-			got_port = ntohs(((struct sockaddr_in*)&ss)->sin_port);
-			inaddr = &((struct sockaddr_in*)&ss)->sin_addr;
-		} else if (ss.ss_family == AF_INET6) {
-			got_port = ntohs(((struct sockaddr_in6*)&ss)->sin6_port);
-			inaddr = &((struct sockaddr_in6*)&ss)->sin6_addr;
-		} else {
-			fprintf(stderr, "Weird address family %d\n",
-			    ss.ss_family);
-			return 1;
-		}
-		addr = evutil_inet_ntop(ss.ss_family, inaddr, addrbuf,
-		    sizeof(addrbuf));
-		if (addr) {
-			printf("Listening on %s:%d\n", addr, got_port);
-			evutil_snprintf(uri_root, sizeof(uri_root),
-			    "http://%s:%d",addr,got_port);
-		} else {
-			fprintf(stderr, "evutil_inet_ntop failed\n");
-			return 1;
-		}
-	}
-
-	event_base_dispatch(base);
-
-	return 0;
+	/* now run http server (never returns) */
+	return serve_some_http ();
 }
