@@ -40,9 +40,9 @@ LIBEVENT_HFILES=\
 libevent/configure: libevent/autogen.sh
 	cd libevent && ./autogen.sh
 
-libevent/Makefile: libevent/configure
-	cd libevent && ./configure --prefix=$(CURDIR) --disable-shared
+libevent/Makefile: libevent/configure $(LIBSSL_LIBS) $(LIBSSL_HFILES)
+	cd libevent && CPPFLAGS=-I$(CURDIR)/include LDFLAGS=-L$(CURDIR)/lib ./configure --prefix=$(CURDIR) --disable-shared
 
-$(LIBEVENT_LIBS) $(LIBEVENT_HFILES): $(shell find libevent -type f -name '*.[ch]') libevent/Makefile $(LIBSSL_LIBS) $(LIBSSL_HFILES)
-	make -C libevent install CPPFLAGS=-I$(CURDIR)/include LDFLAGS=-L$(CURDIR)/lib
+$(LIBEVENT_LIBS) $(LIBEVENT_HFILES): $(shell find libevent -type f -name '*.[ch]') libevent/Makefile
+	make -C libevent install
 	touch -c $(LIBEVENT_LIBS) $(LIBEVENT_HFILES)
