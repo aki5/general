@@ -309,6 +309,7 @@ static int serve_some_http (void)
 int
 main(int argc, char *argv[])
 {
+	printf("hello general!\n");
 	common_setup ();              /* Initialize OpenSSL */
 
 	if (argc > 1) {
