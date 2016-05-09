@@ -1,5 +1,5 @@
 
-CFLAGS=-Iinclude -O2 -fomit-frame-pointer
+CFLAGS=-Iinclude -Iinclude/evhtp -O2 -fomit-frame-pointer
 LDFLAGS=-Llib
 
 all: general
@@ -9,7 +9,7 @@ include libevent.mk
 include libevhtp.mk
 
 general: main.o $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
-	$(CC) $(LDFLAGS) -o $@ main.o -levhtp -levent -levent_openssl -lssl -lcrypto
+	$(CC) $(LDFLAGS) -o $@ main.o -levhtp -levent -levent_openssl -lssl -lcrypto -lpthread
 
 clean:
 	rm -rf general *.o
