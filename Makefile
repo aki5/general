@@ -9,7 +9,7 @@ include libevent.mk
 include libevhtp.mk
 
 general: main.o $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
-	$(CC) $(LDFLAGS) -o $@ main.o -levhtp -levent -levent_openssl -lssl -lcrypto -lpthread
+	$(CC) $(LDFLAGS) -o $@ main.o -levhtp -levent -levent_openssl -lssl -lcrypto -lpthread -lrt
 
 clean:
 	rm -rf general *.o
