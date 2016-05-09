@@ -2,16 +2,16 @@
 CFLAGS=-Iinclude -O2 -fomit-frame-pointer
 LDFLAGS=-Llib
 
-all: generalstore
+all: general
 
 include libssl.mk
 include libevent.mk
 
-generalstore: main.o $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+general: main.o $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o -levent -levent_openssl -lssl -lcrypto
 
 clean:
-	rm -rf generalstore *.o
+	rm -rf general *.o
 
 distclean: clean
 	rm -rf lib bin include share ssl
