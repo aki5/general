@@ -15,8 +15,8 @@ include libssl.mk
 include libevent.mk
 include libevhtp.mk
 
-general: main.o $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
-	$(CC) $(LDFLAGS) -o $@ main.o $(LIBS)
+general: main.o servedns.o $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+	$(CC) $(LDFLAGS) -o $@ main.o servedns.o $(LIBS)
 
 certs:
 	mkdir certs

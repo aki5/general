@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <evhtp/evhtp.h>
+#include "servedns.h"
 
 void
 sendstr(evhtp_request_t *req, void *a) {
@@ -21,12 +22,13 @@ main(int argc, char ** argv)
 	evhtp_t  *htp;
 	char *pempath;
 	char *host;
-	int opt, port;
+	int opt, port, dnsport;
 
 	pempath = NULL;
 	host = "0.0.0.0";
 	port = 8443;
-	while((opt = getopt(argc, argv, "c:l:")) != -1){
+	dnsport = 5553;
+	while((opt = getopt(argc, argv, "c:l:d:")) != -1){
 		char *p;
 		switch(opt){
 		case 'c':
@@ -41,9 +43,18 @@ main(int argc, char ** argv)
 				host = optarg;
 			}
 			break;
+		case 'd':
+			if((p = strchr(optarg, ':')) != NULL){
+				dnsport = strtol(p+1, NULL, 10);
+			} else if(optarg[0] >= '0' && optarg[0] <= '9'){
+				dnsport = strtol(optarg, NULL, 10);
+			} else {
+				host = optarg;
+			}
+			break;
 		default:
 		caseusage:
-			fprintf(stderr, "usage: %s -c path/to/file.pem [-l host:port]\n", argv[0]);
+			fprintf(stderr, "usage: %s -c path/to/file.pem [-l host:port] [-d dnshost:dnsport]\n", argv[0]);
 			exit(1);
 		}
 	}
@@ -94,10 +105,16 @@ main(int argc, char ** argv)
 
 	if(evhtp_ssl_init(htp,&sslconf) == -1){
 		fprintf(stderr, "evhtp_ssl_init failed\n");
-		return 0;
+		exit(1);
 	}
 
 	evhtp_bind_socket(htp, host, port, 2048);
+
+	if(servedns(evbase, 5553) == -1){
+		fprintf(stderr, "servedns failed\n");
+		exit(1);
+	}
+
 	event_base_loop(evbase, 0);
 
 	fprintf(stderr, "evhtp_base_loop exited\n");
