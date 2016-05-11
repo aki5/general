@@ -15,6 +15,8 @@
 
 #define nelem(x) (sizeof(x)/sizeof(x[0]))
 
+#define ONE_HOUR 3600
+
 typedef struct DnsHost DnsHost;
 typedef struct DnsPtr DnsPtr;
 typedef struct DnsSoa DnsSoa;
@@ -57,9 +59,6 @@ DnsPtr ptrdb[] = {
 		.ptr = "localhost",
 	}
 };
-
-
-#define TTL 4242
 
 static DnsHost *
 hostlookup(char *name)
@@ -106,7 +105,7 @@ dnsrequest(struct evdns_server_request *request, void *data)
 				 *	uint32 ADDRESS  A 32 bit Internet address.
 				 */
 				if((dnshost = hostlookup(q->name)) != NULL){
-					evdns_server_request_add_a_reply(request, q->name, 1, dnshost->ip4, TTL);
+					evdns_server_request_add_a_reply(request, q->name, 1, dnshost->ip4, ONE_HOUR);
 				} else {
 					err = DNS_ERR_NOTEXIST;
 				}
@@ -117,7 +116,7 @@ dnsrequest(struct evdns_server_request *request, void *data)
 				 *	uint128 ADDRESS A 128 bit Internet address.
 				 */
 				if((dnshost = hostlookup(q->name)) != NULL){
-					evdns_server_request_add_aaaa_reply(request, q->name, 1, dnshost->ip6, TTL);
+					evdns_server_request_add_aaaa_reply(request, q->name, 1, dnshost->ip6, ONE_HOUR);
 				} else {
 					err = DNS_ERR_NOTEXIST;
 				}
@@ -149,7 +148,7 @@ dnsrequest(struct evdns_server_request *request, void *data)
 				 *	string ptrdname A <domain-name> which points to some location in the domain name space.
 				 */
 				if((dnsptr = ptrlookup(q->name)) != NULL){
-					evdns_server_request_add_ptr_reply(request, NULL, q->name, dnsptr->ptr, TTL);
+					evdns_server_request_add_ptr_reply(request, NULL, q->name, dnsptr->ptr, ONE_HOUR);
 				} else {
 					err = DNS_ERR_NOTEXIST;
 				}
