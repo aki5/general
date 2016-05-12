@@ -84,15 +84,15 @@ LIBSSL_HFILES=\
 ifeq ($(UNAME),Darwin)
 
 openssl/Makefile: openssl/Configure
-	cd openssl && ./Configure no-shared no-dso no-ssl2 --prefix=$(CURDIR) darwin64-x86_64-cc
+	cd openssl && CC=$(CC) ./Configure no-shared no-dso no-ssl2 --prefix=$(CURDIR) darwin64-x86_64-cc
 
 else
 
 openssl/Makefile: openssl/Configure
-	cd openssl && ./config no-shared no-dso no-ssl2 --prefix=$(CURDIR)
+	cd openssl && CC=$(CC) CFLAGS='-O2 -ffunction-sections -fdata-sections -fomit-frame-pointer' ./config no-shared no-dso no-ssl2 --prefix=$(CURDIR)
 
 endif
 
-bin/openssl $(LIBSSL_LIBS) $(LIBSSL_HFILES): $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
+bin/openssl $(LIBSSL_LIBS) $(LIBSSL_HFILES): $(LIBC_ALL) $(shell find openssl -type f -name '*.[ch]') openssl/Makefile
 	make -C openssl install
 

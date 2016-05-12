@@ -1,21 +1,23 @@
 
 UNAME := $(shell uname)
 CFLAGS=-Iinclude -Iinclude/evhtp -O2 -fomit-frame-pointer
-LDFLAGS=-Llib
+LDFLAGS=-Llib -Wl,--gc-sections
 
 ifeq ($(UNAME),Darwin)
 LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread
 else
+CC=$(CURDIR)/bin/musl-gcc
 LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread -lrt
 endif
 
 all: general
 
+include libc.mk
 include libssl.mk
 include libevent.mk
 include libevhtp.mk
 
-general: main.o servedns.o base64.o $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+general: main.o servedns.o base64.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o $(LIBS)
 
 certs:
@@ -43,7 +45,8 @@ distclean: clean
 	rm -rf lib bin include share ssl
 	rm -rf libevhtp/build
 	cd libevhtp && git checkout build/placeholder
-	make -C openssl clean && rm openssl/Makefile
-	make -C libevent distclean
+	make -C openssl clean && rm openssl/Makefile || exit 0
+	make -C libevent distclean || exit 0
+	make -C musl distclean || exit 0
 
 main.o: $(LIBEVHTP_HFILES) $(LIBEVENT_HFILES) $(LIBSSL_HFILES)
