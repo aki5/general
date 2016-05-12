@@ -90,31 +90,7 @@ openssl/Makefile: openssl/Configure
 		no-asm\
 		no-hw\
 		no-krb5\
-		no-idea\
-		no-camellia\
-		no-seed\
-		no-cast\
-		no-rc2\
-		no-rc5\
-		no-md2\
-		no-md4\
 		--prefix=$(CURDIR)
-
-#		no-bf\
-#		no-rc4\
-#		no-md5\
-#		no-ripemd\
-#		no-mdc2\
-#		no-aes\
-#		no-des\
-#		no-sha\
-#		no-rsa\
-#		no-dsa\
-#		no-dh\
-#		no-ec\
-#		no-ecdsa\
-#		no-ecdh\
-#		no-err\
 
 endif
 

@@ -244,6 +244,6 @@ $(LIBC_ALL): $(shell find musl -type f -name '*.[ch]') musl/Makefile
 	make -C musl install CC=gcc
 	touch -c $(LIBC_ALL)
 
-include/sys/queue.h:
+include/sys/queue.h: queue.h
 	mkdir -p include/sys
 	cp queue.h include/sys/queue.h
