@@ -36,7 +36,7 @@ certs/localhost.pem: certs/localhost.cert certs/localhost.key certs
 	cat certs/localhost.key certs/localhost.cert > certs/localhost.pem
 
 test: general certs/localhost.pem
-	(./general -c certs/localhost.pem & (sleep 1 && curl --insecure https://localhost:8443/ ; echo ; kill $$!))
+	(./general -c certs/localhost.pem & (sleep 1 && curl --insecure https://localhost:5443/ ; echo ; kill $$!))
 
 clean:
 	rm -rf general *.o
