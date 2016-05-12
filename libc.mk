@@ -229,6 +229,7 @@ LIBC_HFILES=\
 	include/wchar.h\
 	include/wctype.h\
 	include/wordexp.h\
+	include/sys/queue.h\
 
 LIBC_ALL=\
 	$(LIBC_BIN)\
@@ -241,3 +242,7 @@ musl/Makefile: musl/configure
 
 $(LIBC_OFILES) $(LIBC_LIBS) $(LIBC_HFILES) $(LIBC_BIN): $(shell find musl -type f -name '*.[ch]') musl/Makefile
 	make -C musl install CC=gcc
+
+include/sys/queue.h:
+	mkdir -p include/sys
+	cp queue.h include/sys/queue.h
