@@ -93,7 +93,6 @@ openssl/Makefile: openssl/Configure
 		no-idea\
 		no-camellia\
 		no-seed\
-		no-bf\
 		no-cast\
 		no-rc2\
 		no-rc5\
@@ -101,6 +100,7 @@ openssl/Makefile: openssl/Configure
 		no-md4\
 		--prefix=$(CURDIR)
 
+#		no-bf\
 #		no-rc4\
 #		no-md5\
 #		no-ripemd\
