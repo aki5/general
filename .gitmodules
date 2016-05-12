@@ -9,3 +9,6 @@
 [submodule "libevhtp"]
 	path = libevhtp
 	url = https://github.com/ellzey/libevhtp.git
+[submodule "musl"]
+	path = musl
+	url = git://git.musl-libc.org/musl
