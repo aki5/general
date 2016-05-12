@@ -96,12 +96,12 @@ openssl/Makefile: openssl/Configure
 		no-bf\
 		no-cast\
 		no-rc2\
-		no-rc4\
 		no-rc5\
 		no-md2\
 		no-md4\
 		--prefix=$(CURDIR)
 
+#		no-rc4\
 #		no-md5\
 #		no-ripemd\
 #		no-mdc2\
