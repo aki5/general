@@ -16,7 +16,6 @@ include libc.mk
 include libssl.mk
 include libevent.mk
 include libevhtp.mk
-include libpaxos.mk
 
 general: main.o servedns.o base64.o city.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o $(LIBS)
