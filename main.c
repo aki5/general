@@ -8,23 +8,80 @@
 #include <evhtp/evhtp.h>
 #include "servedns.h"
 #include "base64.h"
+#include "city.h"
+
 
 #define data(x) #x
 
 char *google_client_id;
 char *roothtml;
+char *redirect;
 
-char *
-rootinit(void)
+void
+dumpheaders(evhtp_request_t *req)
 {
-	int len, cap;
-	char *htmldoc;
+	evhtp_kv_t *kv;
+	TAILQ_FOREACH(kv, req->headers_in, next) {
+		fprintf(stderr, "%*s: %*s\n", kv->klen, kv->key, kv->vlen, kv->val);
+	}
+}
 
-	htmldoc = NULL;
-	len = -1;
-	cap = 0;
-loop:
-	len = snprintf(htmldoc, cap, data(
+const char *
+geohost(evhtp_request_t *req)
+{
+	struct sockaddr_in *sa4;
+	struct sockaddr_in6 *sa6;
+	evhtp_connection_t *conn;
+	const char *host;
+	char buf[128];
+
+	conn = evhtp_request_get_connection(req);
+	sa4 = (struct sockaddr_in*)conn->saddr;
+	sa6 = (struct sockaddr_in6*)conn->saddr;
+	host = evhtp_header_find(req->headers_in, "Host");
+	switch(conn->saddr->sa_family){
+	case AF_INET:
+		inet_ntop(AF_INET, &sa4->sin_addr, buf, sizeof buf);
+		fprintf(stderr, "geohost %s\n", buf);
+		if(!strncmp(buf, "127.", 4) && !strcmp(host, "localhost"))
+			return redirect;
+		break;
+	case AF_INET6:
+		inet_ntop(AF_INET6, &sa6->sin6_addr, buf, sizeof buf);
+		fprintf(stderr, "geohost %s\n", buf);
+		break;
+	}
+	return host;
+}
+
+void
+redirectpath(evhtp_request_t *req, void *a)
+{
+	char location[1024];
+	char *path;
+	int n;
+
+	dumpheaders(req);
+
+	path = req->uri->path->full;
+	n = snprintf(location, sizeof location, "https://%s%s", geohost(req), path);
+	if(n >= sizeof location){
+		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
+		evbuffer_add_printf(req->buffer_out, "moved permanently to %s\n", location);
+		evhtp_send_reply(req, 500);
+		return;
+	}
+	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Location", location, 1, 1));
+	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
+	evbuffer_add_printf(req->buffer_out, "moved to %s\n", location);
+	evhtp_send_reply(req, 303); // 303:see other, 301:moved permanently
+}
+
+void
+serveroot(evhtp_request_t *req, void *a)
+{
+	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/html", 1, 1));
+	evbuffer_add_printf(req->buffer_out, data(
 		<html lang="en">
 		<head>
 		<meta name="google-signin-scope" content="profile email">
@@ -67,31 +124,17 @@ loop:
 		</body>
 		</html>
 	), google_client_id);
-	if(len > cap){
-		cap = len;
-		htmldoc = realloc(htmldoc, cap);
-		goto loop;
-	}
 
-	return htmldoc;
-}
-
-void
-serveroot(evhtp_request_t *req, void *a)
-{
-	if(roothtml == NULL)
-		roothtml = rootinit();
-	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/html", 1, 1));
-	evbuffer_add(req->buffer_out, roothtml, strlen(roothtml));
 	evhtp_send_reply(req, EVHTP_RES_OK);
 }
 
 void
 servetokensignin(evhtp_request_t *req, void *a)
 {
-	evhtp_kv_t *kv;
 	char *buf;
 	int len;
+
+	dumpheaders(req);
 
 	buf = evbuffer_pullup(req->buffer_in, -1);
 	len = evbuffer_get_length(req->buffer_in);
@@ -117,11 +160,6 @@ servetokensignin(evhtp_request_t *req, void *a)
 		fprintf(stderr, "%c", isprint(b64out[i]) ? b64out[i] : '.');
 	fprintf(stderr, "\n");
 
-
-	TAILQ_FOREACH(kv, req->headers_in, next) {
-		fprintf(stderr, "%*s: %*s\n", kv->klen, kv->key, kv->vlen, kv->val);
-	}
-	evbuffer_add(req->buffer_out, a, strlen(a));
 	evhtp_send_reply(req, EVHTP_RES_OK);
 	return;
 
@@ -134,16 +172,18 @@ int
 main(int argc, char ** argv)
 {
 	evbase_t *evbase;
-	evhtp_t  *htp;
+	evhtp_t  *https;
+	evhtp_t *http;
 	char *pempath;
 	char *host;
-	int opt, htport, dnsport;
+	int opt, httpport, httpsport, dnsport;
 
 	pempath = NULL;
 	host = "0.0.0.0";
-	htport = 5443;
+	httpsport = 5443;
+	httpport = 5080;
 	dnsport = 5053;
-	while((opt = getopt(argc, argv, "c:p:d:g:")) != -1){
+	while((opt = getopt(argc, argv, "c:h:s:d:g:r:")) != -1){
 		char *p;
 		switch(opt){
 		case 'g':
@@ -152,15 +192,21 @@ main(int argc, char ** argv)
 		case 'c':
 			pempath = optarg;
 			break;
-		case 'p':
-			htport = strtol(optarg, NULL, 10);
+		case 'h':
+			httpport = strtol(optarg, NULL, 10);
+			break;
+		case 's':
+			httpsport = strtol(optarg, NULL, 10);
 			break;
 		case 'd':
 			dnsport = strtol(optarg, NULL, 10);
 			break;
+		case 'r':
+			redirect = optarg;
+			break;
 		default:
 		caseusage:
-			fprintf(stderr, "usage: %s -c path/to/file.pem [-p htport] [-d dnsport] [-g google-client-id]\n", argv[0]);
+			fprintf(stderr, "usage: %s -c path/to/file.pem [-h httpport] [-s httpsport] [-d dnsport] [-g google-client-id] [-r redirect]\n", argv[0]);
 			exit(1);
 		}
 	}
@@ -169,12 +215,13 @@ main(int argc, char ** argv)
 		goto caseusage;
 
 	evbase = event_base_new();
-	htp = evhtp_new(evbase, NULL);
-	evhtp_set_cb(htp, "/", serveroot, "Hello simple World");
-	evhtp_set_cb(htp, "/tokensignin", servetokensignin, "Hello simple World");
+	https = evhtp_new(evbase, NULL);
+	evhtp_set_cb(https, "/", serveroot, NULL);
+	evhtp_set_cb(https, "/tokensignin", servetokensignin, NULL);
+	evhtp_set_parser_flags(https, EVHTP_PARSE_QUERY_FLAG_LENIENT);
 
 
-	evhtp_use_threads(htp, NULL, 8, NULL);
+	evhtp_use_threads(https, NULL, 8, NULL);
 
 	char ciphers[] =
 		"ECDH+AESGCM:"
@@ -185,11 +232,9 @@ main(int argc, char ** argv)
 		"DH+AES:"
 		"ECDH+3DES:"
 		"DH+3DES:"
-
 		"RSA+AESGCM:"
 		"RSA+AES:"
 		"RSA+3DES:"
-
 		"!aNULL:"
 		"!MD5";
 
@@ -211,12 +256,18 @@ main(int argc, char ** argv)
 	sslconf.scache_get = NULL;
 	sslconf.scache_del = NULL;
 
-	if(evhtp_ssl_init(htp,&sslconf) == -1){
+	if(evhtp_ssl_init(https, &sslconf) == -1){
 		fprintf(stderr, "evhtp_ssl_init failed\n");
 		exit(1);
 	}
+	evhtp_bind_socket(https, host, httpsport, 2048);
 
-	evhtp_bind_socket(htp, host, htport, 2048);
+	http = evhtp_new(evbase, NULL);
+	evhtp_set_cb(http, "/", redirectpath, NULL);
+	evhtp_set_parser_flags(http, EVHTP_PARSE_QUERY_FLAG_LENIENT);
+
+	evhtp_use_threads(http, NULL, 8, NULL);
+	evhtp_bind_socket(http, host, httpport, 2048);
 
 	if(servedns(evbase, dnsport) == -1){
 		fprintf(stderr, "servedns failed\n");
@@ -226,8 +277,8 @@ main(int argc, char ** argv)
 	event_base_loop(evbase, 0);
 
 	fprintf(stderr, "evhtp_base_loop exited\n");
-	evhtp_unbind_socket(htp);
-	evhtp_free(htp);
+	evhtp_unbind_socket(https);
+	evhtp_free(https);
 	event_base_free(evbase);
 
 	return 0;

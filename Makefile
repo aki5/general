@@ -16,8 +16,9 @@ include libc.mk
 include libssl.mk
 include libevent.mk
 include libevhtp.mk
+include libpaxos.mk
 
-general: main.o servedns.o base64.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+general: main.o servedns.o base64.o city.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o $(LIBS)
 
 certs:
@@ -49,4 +50,4 @@ distclean: clean
 	make -C libevent distclean || exit 0
 	make -C musl distclean || exit 0
 
-main.o: $(LIBEVHTP_HFILES) $(LIBEVENT_HFILES) $(LIBSSL_HFILES)
+main.o servedns.o base64.o city.o: $(LIBC_ALL) $(LIBEVHTP_HFILES) $(LIBEVENT_HFILES) $(LIBSSL_HFILES)

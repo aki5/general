@@ -80,7 +80,7 @@ openssl/Makefile: openssl/Configure
 
 else
 
-openssl/Makefile: openssl/Configure
+openssl/Makefile: $(LIBC_ALL) openssl/Configure
 	cd openssl && CC=$(CC) CFLAGS='-O2 -ffunction-sections -fdata-sections -fomit-frame-pointer' \
 		./config\
 		no-shared\

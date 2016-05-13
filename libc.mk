@@ -229,18 +229,19 @@ LIBC_HFILES=\
 	include/wchar.h\
 	include/wctype.h\
 	include/wordexp.h\
-	include/sys/queue.h\
 
 LIBC_ALL=\
 	$(LIBC_BIN)\
 	$(LIBC_OFILES)\
 	$(LIBC_HFILES)\
 	$(LIBC_LIBS)\
+	include/sys/queue.h\
 
-musl/Makefile: musl/configure
+musl/Makefile musl/config.mak: musl/configure
 	(cd musl && CC=gcc ./configure --prefix=$(CURDIR) --disable-shared)
+	touch -c musl/Makefile
 
-$(LIBC_ALL): $(shell find musl -type f -name '*.[ch]') musl/Makefile
+$(LIBC_BIN) $(LIBC_OFILES) $(LIBC_HFILES) $(LIBC_LIBS): $(shell find musl -type f -name '*.[ch]') musl/Makefile musl/config.mak
 	make -C musl install CC=gcc
 	touch -c $(LIBC_ALL)
 
