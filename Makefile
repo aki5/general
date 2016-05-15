@@ -17,8 +17,8 @@ include libssl.mk
 include libevent.mk
 include libevhtp.mk
 
-general: main.o servedns.o base64.o city.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
-	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o $(LIBS)
+general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o city.o keyval.o $(LIBS)
 
 certs:
 	mkdir certs
@@ -49,4 +49,4 @@ distclean: clean
 	make -C libevent distclean || exit 0
 	make -C musl distclean || exit 0
 
-main.o servedns.o base64.o city.o: $(LIBC_ALL) $(LIBEVHTP_HFILES) $(LIBEVENT_HFILES) $(LIBSSL_HFILES)
+main.o servedns.o base64.o city.o keyval.o: $(LIBC_ALL) $(LIBEVHTP_HFILES) $(LIBEVENT_HFILES) $(LIBSSL_HFILES)
