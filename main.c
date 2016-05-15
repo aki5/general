@@ -10,7 +10,6 @@
 #include "base64.h"
 #include "city.h"
 
-
 #define data(x) #x
 
 char *google_client_id;
@@ -160,12 +159,56 @@ servetokensignin(evhtp_request_t *req, void *a)
 		fprintf(stderr, "%c", isprint(b64out[i]) ? b64out[i] : '.');
 	fprintf(stderr, "\n");
 
+	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "application/json", 1, 1));
+	evbuffer_add(req->buffer_out, "{}", 2);
 	evhtp_send_reply(req, EVHTP_RES_OK);
 	return;
 
 exit_failure:
-	evhtp_send_reply(req, EVHTP_RES_OK);
+	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
+	evbuffer_add_printf(req->buffer_out, "oopsie\n");
+	evhtp_send_reply(req, 501);
 	return;
+}
+
+void
+servejsonptr(evhtp_request_t *req)
+{
+
+	char *buf, *path;
+	int buflen, pathlen;
+
+	buf = evbuffer_pullup(req->buffer_in, -1);
+	buflen = evbuffer_get_length(req->buffer_in);
+
+	path = req->uri->path->full;
+	pathlen = strlen(path);
+	fprintf(stderr, "servekeyval path %s\n", path);
+
+	switch(req->method){
+	case htp_method_PUT:
+	case htp_method_GET:
+	case htp_method_DELETE:
+
+	case htp_method_HEAD:
+	case htp_method_POST:
+	case htp_method_MKCOL:
+	case htp_method_COPY:
+	case htp_method_MOVE:
+	case htp_method_OPTIONS:
+	case htp_method_PROPFIND:
+	case htp_method_PROPPATCH:
+	case htp_method_LOCK:
+	case htp_method_UNLOCK:
+	case htp_method_TRACE:
+	case htp_method_CONNECT:
+	case htp_method_PATCH:
+	default:
+		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
+		evbuffer_add_printf(req->buffer_out, "unsupported request\n");
+		evhtp_send_reply(req, 501);
+		return;
+	}
 }
 
 int
