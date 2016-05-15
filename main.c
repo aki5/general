@@ -41,13 +41,11 @@ geohost(evhtp_request_t *req)
 	switch(conn->saddr->sa_family){
 	case AF_INET:
 		inet_ntop(AF_INET, &sa4->sin_addr, buf, sizeof buf);
-		fprintf(stderr, "geohost %s\n", buf);
 		if(!strncmp(buf, "127.", 4) && !strcmp(host, "localhost"))
 			return redirect;
 		break;
 	case AF_INET6:
 		inet_ntop(AF_INET6, &sa6->sin6_addr, buf, sizeof buf);
-		fprintf(stderr, "geohost %s\n", buf);
 		break;
 	}
 	return host;
@@ -59,8 +57,6 @@ redirectpath(evhtp_request_t *req, void *a)
 	char location[1024];
 	char *path;
 	int n;
-
-	dumpheaders(req);
 
 	path = req->uri->path->full;
 	n = snprintf(location, sizeof location, "https://%s%s", geohost(req), path);
@@ -172,7 +168,7 @@ exit_failure:
 }
 
 void
-servejsonptr(evhtp_request_t *req)
+servekeyval(evhtp_request_t *req)
 {
 
 	char *buf, *path;
@@ -183,7 +179,6 @@ servejsonptr(evhtp_request_t *req)
 
 	path = req->uri->path->full;
 	pathlen = strlen(path);
-	fprintf(stderr, "servekeyval path %s\n", path);
 
 	switch(req->method){
 	case htp_method_PUT:
@@ -219,14 +214,15 @@ main(int argc, char ** argv)
 	evhtp_t *http;
 	char *pempath;
 	char *host;
-	int opt, httpport, httpsport, dnsport;
+	int opt, httpport, httpsport, dnsport, nthreads;
 
 	pempath = NULL;
 	host = "0.0.0.0";
 	httpsport = 5443;
 	httpport = 5080;
 	dnsport = 5053;
-	while((opt = getopt(argc, argv, "c:h:s:d:g:r:")) != -1){
+	nthreads = 4;
+	while((opt = getopt(argc, argv, "c:h:s:d:g:r:t:")) != -1){
 		char *p;
 		switch(opt){
 		case 'g':
@@ -247,9 +243,12 @@ main(int argc, char ** argv)
 		case 'r':
 			redirect = optarg;
 			break;
+		case 't':
+			nthreads = strtol(optarg, NULL, 10);
+			break;
 		default:
 		caseusage:
-			fprintf(stderr, "usage: %s -c path/to/file.pem [-h httpport] [-s httpsport] [-d dnsport] [-g google-client-id] [-r redirect]\n", argv[0]);
+			fprintf(stderr, "usage: %s -c path/to/file.pem [-h httpport] [-s httpsport] [-d dnsport] [-g google-client-id] [-r redirect] [-t nthreads]\n", argv[0]);
 			exit(1);
 		}
 	}
@@ -260,11 +259,12 @@ main(int argc, char ** argv)
 	evbase = event_base_new();
 	https = evhtp_new(evbase, NULL);
 	evhtp_set_cb(https, "/", serveroot, NULL);
+	evhtp_set_cb(https, "/keyval", servekeyval, NULL);
 	evhtp_set_cb(https, "/tokensignin", servetokensignin, NULL);
-	evhtp_set_parser_flags(https, EVHTP_PARSE_QUERY_FLAG_LENIENT);
+	//evhtp_set_parser_flags(https, EVHTP_PARSE_QUERY_FLAG_LENIENT);
 
 
-	evhtp_use_threads(https, NULL, 8, NULL);
+	evhtp_use_threads(https, NULL, nthreads, NULL);
 
 	char ciphers[] =
 		"ECDH+AESGCM:"
@@ -307,9 +307,9 @@ main(int argc, char ** argv)
 
 	http = evhtp_new(evbase, NULL);
 	evhtp_set_cb(http, "/", redirectpath, NULL);
-	evhtp_set_parser_flags(http, EVHTP_PARSE_QUERY_FLAG_LENIENT);
+	//evhtp_set_parser_flags(http, EVHTP_PARSE_QUERY_FLAG_LENIENT);
 
-	evhtp_use_threads(http, NULL, 8, NULL);
+	evhtp_use_threads(http, NULL, nthreads, NULL);
 	evhtp_bind_socket(http, host, httpport, 2048);
 
 	if(servedns(evbase, dnsport) == -1){
