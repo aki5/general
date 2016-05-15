@@ -1,7 +1,7 @@
 
 UNAME := $(shell uname)
 CFLAGS=-Iinclude -Iinclude/evhtp -O2 -fomit-frame-pointer
-LDFLAGS=-Llib -Wl,--gc-sections
+LDFLAGS=-Llib
 
 ifeq ($(UNAME),Darwin)
 LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread

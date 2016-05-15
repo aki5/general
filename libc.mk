@@ -1,3 +1,11 @@
+ifeq ($(UNAME),Darwin)
+
+LIBC_BIN=
+LIBC_OFILES=
+LIBC_LIBS=
+LIBC_HFILES=
+
+else
 
 LIBC_BIN=\
 	bin/musl-gcc\
@@ -248,3 +256,5 @@ $(LIBC_BIN) $(LIBC_OFILES) $(LIBC_HFILES) $(LIBC_LIBS): $(shell find musl -type 
 include/sys/queue.h: queue.h
 	mkdir -p include/sys
 	cp queue.h include/sys/queue.h
+
+endif
