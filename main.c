@@ -5,13 +5,16 @@
 #include <stdint.h>
 #include <errno.h>
 #include <getopt.h>
+#include <arpa/inet.h>
+#include <ctype.h>
 #include <evhtp/evhtp.h>
 #include "servedns.h"
 #include "base64.h"
-#include "city.h"
+#include "keyval.h"
 
 #define data(x) #x
 
+Kvstore *kvroot;
 char *google_client_id;
 char *roothtml;
 char *redirect;
@@ -21,7 +24,7 @@ dumpheaders(evhtp_request_t *req)
 {
 	evhtp_kv_t *kv;
 	TAILQ_FOREACH(kv, req->headers_in, next) {
-		fprintf(stderr, "%*s: %*s\n", kv->klen, kv->key, kv->vlen, kv->val);
+		fprintf(stderr, "%*s: %*s\n", (int)kv->klen, kv->key, (int)kv->vlen, kv->val);
 	}
 }
 
@@ -58,9 +61,10 @@ redirectpath(evhtp_request_t *req, void *a)
 	char *path;
 	int n;
 
+	(void)a;
 	path = req->uri->path->full;
 	n = snprintf(location, sizeof location, "https://%s%s", geohost(req), path);
-	if(n >= sizeof location){
+	if((size_t)n >= sizeof location){
 		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
 		evbuffer_add_printf(req->buffer_out, "moved permanently to %s\n", location);
 		evhtp_send_reply(req, 500);
@@ -75,6 +79,7 @@ redirectpath(evhtp_request_t *req, void *a)
 void
 serveroot(evhtp_request_t *req, void *a)
 {
+	(void)a;
 	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/html", 1, 1));
 	evbuffer_add_printf(req->buffer_out, data(
 		<html lang="en">
@@ -129,9 +134,10 @@ servetokensignin(evhtp_request_t *req, void *a)
 	char *buf;
 	int len;
 
+	(void)a;
 	dumpheaders(req);
 
-	buf = evbuffer_pullup(req->buffer_in, -1);
+	buf = (char *)evbuffer_pullup(req->buffer_in, -1);
 	len = evbuffer_get_length(req->buffer_in);
 
 	char b64out[len];
@@ -159,31 +165,63 @@ servetokensignin(evhtp_request_t *req, void *a)
 	evbuffer_add(req->buffer_out, "{}", 2);
 	evhtp_send_reply(req, EVHTP_RES_OK);
 	return;
+}
 
-exit_failure:
-	evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
-	evbuffer_add_printf(req->buffer_out, "oopsie\n");
-	evhtp_send_reply(req, 501);
-	return;
+static void *
+memdup(void *ptr, int size)
+{
+	void *nptr;
+	nptr = malloc(size);
+	memcpy(nptr, ptr, size);
+	return nptr;
 }
 
 void
-servekeyval(evhtp_request_t *req)
+servekeyval(evhtp_request_t *req, void *a)
 {
 
-	char *buf, *path;
-	int buflen, pathlen;
+	void *buf, *key;
+	char *path;
+	int buflen, keylen, pathlen;
 
-	buf = evbuffer_pullup(req->buffer_in, -1);
-	buflen = evbuffer_get_length(req->buffer_in);
-
+	(void)a;
 	path = req->uri->path->full;
 	pathlen = strlen(path);
 
 	switch(req->method){
+
 	case htp_method_PUT:
+		buf = evbuffer_pullup(req->buffer_in, -1);
+		buflen = evbuffer_get_length(req->buffer_in);
+		path = memdup(path, pathlen);
+		buf = memdup(buf, buflen);
+		if(keyval_put(kvroot, path, pathlen, buf, buflen) == -1){
+			free(path);
+			free(buf);
+			goto badrequest;
+		}
+		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "application/json", 1, 1));
+		evbuffer_add(req->buffer_out, "{}", 2);
+		evhtp_send_reply(req, EVHTP_RES_OK);
+		return;
+
 	case htp_method_GET:
+		if(keyval_get(kvroot, path, pathlen, NULL, NULL, &buf, &buflen) == -1)
+			goto badrequest;
+		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "application/json", 1, 1));
+		evbuffer_add(req->buffer_out, buf, buflen);
+		evhtp_send_reply(req, EVHTP_RES_OK);
+		return;
+
 	case htp_method_DELETE:
+		if(keyval_delete(kvroot, path, pathlen, &key, &keylen, &buf, &buflen) == -1)
+			goto badrequest;
+		free(key);
+		free(buf);
+		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "application/json", 1, 1));
+		evbuffer_add(req->buffer_out, "{}", 2);
+		evhtp_send_reply(req, EVHTP_RES_OK);
+		return;
 
 	case htp_method_HEAD:
 	case htp_method_POST:
@@ -199,9 +237,10 @@ servekeyval(evhtp_request_t *req)
 	case htp_method_CONNECT:
 	case htp_method_PATCH:
 	default:
+	badrequest:
 		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
-		evbuffer_add_printf(req->buffer_out, "unsupported request\n");
-		evhtp_send_reply(req, 501);
+		evbuffer_add_printf(req->buffer_out, "bad request\n");
+		evhtp_send_reply(req, 400);
 		return;
 	}
 }
@@ -216,6 +255,9 @@ main(int argc, char ** argv)
 	char *host;
 	int opt, httpport, httpsport, dnsport, nthreads;
 
+	kvroot = malloc(sizeof kvroot[0]);
+	keyval_init_bucket(kvroot);
+
 	pempath = NULL;
 	host = "0.0.0.0";
 	httpsport = 5443;
@@ -223,7 +265,6 @@ main(int argc, char ** argv)
 	dnsport = 5053;
 	nthreads = 4;
 	while((opt = getopt(argc, argv, "c:h:s:d:g:r:t:")) != -1){
-		char *p;
 		switch(opt){
 		case 'g':
 			google_client_id = "696325580206-betr6135tc0fk6dbgh830pnmee8rjgrq.apps.googleusercontent.com";
@@ -259,7 +300,7 @@ main(int argc, char ** argv)
 	evbase = event_base_new();
 	https = evhtp_new(evbase, NULL);
 	evhtp_set_cb(https, "/", serveroot, NULL);
-	evhtp_set_cb(https, "/keyval", servekeyval, NULL);
+	evhtp_set_cb(https, "/keyval/", servekeyval, NULL);
 	evhtp_set_cb(https, "/tokensignin", servetokensignin, NULL);
 	//evhtp_set_parser_flags(https, EVHTP_PARSE_QUERY_FLAG_LENIENT);
 

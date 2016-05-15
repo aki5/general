@@ -34,7 +34,7 @@ base64dec(char *out, char *buf, int len)
 
 	if(frombase64['='] == 0)
 		for(i = 0; tobase64[i] != '\0'; i++)
-			frombase64[tobase64[i]] = i;
+			frombase64[tobase64[i] & 127] = i;
 
 	for(i = 0, j = 0; i+3 < len; i += 4, j += 3){
 		tmp = frombase64[buf[i+3]&127] | ((frombase64[buf[i+2]&127] & 63) << 6) | ((frombase64[buf[i+1]&127] & 63) << 12) | ((frombase64[buf[i+0]&127] & 63) << 18);

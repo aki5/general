@@ -13,7 +13,7 @@
 #include <errno.h>
 #include <getopt.h>
 
-#define nelem(x) (sizeof(x)/sizeof(x[0]))
+#define nelem(x) (int)(sizeof(x)/sizeof(x[0]))
 
 #define ONE_HOUR 3600
 
@@ -91,7 +91,6 @@ dnsrequest(struct evdns_server_request *request, void *data)
 		DnsHost *dnshost;
 		DnsPtr *dnsptr;
 		struct evdns_server_question *q;
-		int j;
 
 		// request: class type name 
 		q = request->questions[i];

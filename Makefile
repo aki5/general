@@ -1,6 +1,6 @@
 
 UNAME := $(shell uname)
-CFLAGS=-Iinclude -Iinclude/evhtp -O2 -fomit-frame-pointer
+CFLAGS=-Iinclude -Iinclude/evhtp -W -Wall -O2 -fomit-frame-pointer
 LDFLAGS=-Llib
 
 ifeq ($(UNAME),Darwin)
