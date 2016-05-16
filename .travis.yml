@@ -5,6 +5,6 @@ addons:
     packages:
       - cmake
       - cmake-data
-      - libcurl-dev
+      - libcurl4-openssl-dev
 
 script: make test
