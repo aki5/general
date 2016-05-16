@@ -38,8 +38,8 @@ certs/localhost.cert: certs/localhost.key certs/localhost.csr bin/openssl certs
 certs/localhost.pem: certs/localhost.cert certs/localhost.key certs
 	cat certs/localhost.key certs/localhost.cert > certs/localhost.pem
 
-test: general certs/localhost.pem
-	(./general -c certs/localhost.pem & (sleep 1 && curl --insecure https://localhost:5443/ ; echo ; kill $$!))
+test: general certs/localhost.pem test_https
+	(./general -c certs/localhost.pem & (sleep 1 && ./test_https -p https://localhost:5443 ; echo ; kill $$!))
 
 clean:
 	rm -rf general test_https *.o
