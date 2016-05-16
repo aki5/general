@@ -20,6 +20,9 @@ include libevhtp.mk
 general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o city.o keyval.o $(LIBS)
 
+test_https: test_https.o
+	$(CC) -o $@ test_https.o -lcurl
+
 certs:
 	mkdir certs
 
@@ -39,7 +42,7 @@ test: general certs/localhost.pem
 	(./general -c certs/localhost.pem & (sleep 1 && curl --insecure https://localhost:5443/ ; echo ; kill $$!))
 
 clean:
-	rm -rf general *.o
+	rm -rf general test_https *.o
 
 distclean: clean
 	rm -rf lib bin include share ssl
