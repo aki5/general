@@ -8,7 +8,7 @@
 char *dsthost;
 int verifypeer = 1;
 int verifyhost = 1;
-int numkeys = 10000;
+int numkeys = 100;
 
 int
 main(int argc, char *argv[])
@@ -17,8 +17,11 @@ main(int argc, char *argv[])
 	int res;
 	int i, pid, opt;
 
-	while((opt = getopt(argc, argv, "ph")) != -1){
+	while((opt = getopt(argc, argv, "phn:")) != -1){
 		switch(opt){
+		case 'n':
+			numkeys = strtol(optarg, NULL, 10);
+			break;
 		case 'p':
 			verifypeer = 0;
 			break;
@@ -38,6 +41,7 @@ main(int argc, char *argv[])
 	}
 
 	pid = getpid();
+
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verifypeer);
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, verifyhost);
 
@@ -52,12 +56,15 @@ main(int argc, char *argv[])
 
 		res = curl_easy_perform(curl);
 		if(res != CURLE_OK){
-			fprintf(stderr, "curl_easy_perform failed: %s\n", curl_easy_strerror(res));
+			fprintf(stderr, "curl_easy_perform put %s failed: %s\n", url, curl_easy_strerror(res));
 			goto exit_failure;
 		}
 	}
 
 	curl_easy_reset(curl);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verifypeer);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, verifyhost);
+
 	for(i = 0; i < numkeys; i++){
 		char url[256];
 		snprintf(url, sizeof url, "%s/keyval/%d.%d", dsthost, pid, i);
@@ -65,12 +72,15 @@ main(int argc, char *argv[])
 
 		res = curl_easy_perform(curl);
 		if(res != CURLE_OK){
-			fprintf(stderr, "curl_easy_perform failed: %s\n", curl_easy_strerror(res));
+			fprintf(stderr, "curl_easy_perform get %s failed: %s\n", url, curl_easy_strerror(res));
 			goto exit_failure;
 		}
 	}
 
 	curl_easy_reset(curl);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verifypeer);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, verifyhost);
+
 	for(i = 0; i < numkeys; i++){
 		char url[256];
 		int urllen;
@@ -80,7 +90,7 @@ main(int argc, char *argv[])
 
 		res = curl_easy_perform(curl);
 		if(res != CURLE_OK){
-			fprintf(stderr, "curl_easy_perform failed: %s\n", curl_easy_strerror(res));
+			fprintf(stderr, "curl_easy_perform delete %s failed: %s\n", url, curl_easy_strerror(res));
 			goto exit_failure;
 		}
 	}
