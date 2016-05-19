@@ -1,5 +1,6 @@
 
 UNAME := $(shell uname)
+HOSTCC := $(CC)
 CFLAGS=-Iinclude -Iinclude/evhtp -W -Wall -O2 -fomit-frame-pointer
 LDFLAGS=-Llib
 
@@ -20,8 +21,8 @@ include libevhtp.mk
 general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o city.o keyval.o $(LIBS)
 
-test_https: test_https.o
-	$(CC) -o $@ test_https.o -lcurl
+test_https: test_https.c
+	$(HOSTCC) -o $@ test_https.c -lcurl
 
 certs:
 	mkdir certs
