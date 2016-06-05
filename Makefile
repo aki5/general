@@ -5,10 +5,10 @@ CFLAGS=-Iinclude -Iinclude/evhtp -W -Wall -O2 -fomit-frame-pointer
 LDFLAGS=-Llib
 
 ifeq ($(UNAME),Darwin)
-LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread
+LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread -ljson5
 else
 CC=$(CURDIR)/bin/musl-gcc
-LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread -lrt
+LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread -lrt -ljson5
 endif
 
 all: general
@@ -17,8 +17,9 @@ include libc.mk
 include libssl.mk
 include libevent.mk
 include libevhtp.mk
+include libjson5.mk
 
-general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS)
+general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS) $(LIBJSON5_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o city.o keyval.o $(LIBS)
 
 test_https: test_https.c
