@@ -11,6 +11,7 @@
 #include "servedns.h"
 #include "base64.h"
 #include "keyval.h"
+#include "json.h"
 
 #define data(x) #x
 
@@ -179,10 +180,11 @@ memdup(void *ptr, int size)
 void
 servekeyval(evhtp_request_t *req, void *a)
 {
-
+	JsonRoot jsroot;
 	void *buf, *key;
 	char *path;
 	int buflen, keylen, pathlen;
+	int err;
 
 	(void)a;
 	path = req->uri->path->full;
@@ -193,6 +195,16 @@ servekeyval(evhtp_request_t *req, void *a)
 	case htp_method_PUT:
 		buf = evbuffer_pullup(req->buffer_in, -1);
 		buflen = evbuffer_get_length(req->buffer_in);
+
+		memset(&jsroot, 0, sizeof jsroot);
+		err = jsonparse(&jsroot, buf, buflen);
+		if(err != 0){
+			jsonfree(&jsroot);
+			goto badrequest;
+		}
+
+		jsonfree(&jsroot);
+
 		path = memdup(path, pathlen);
 		buf = memdup(buf, buflen);
 		if(keyval_put(kvroot, path, pathlen, buf, buflen) == -1){
@@ -253,6 +265,7 @@ main(int argc, char ** argv)
 	evhtp_t *http;
 	char *pempath;
 	char *host;
+	char *optrest;
 	int opt, httpport, httpsport, dnsport, nthreads;
 
 	kvroot = malloc(sizeof kvroot[0]);
@@ -267,25 +280,33 @@ main(int argc, char ** argv)
 	while((opt = getopt(argc, argv, "c:h:s:d:g:r:t:")) != -1){
 		switch(opt){
 		case 'g':
-			google_client_id = "696325580206-betr6135tc0fk6dbgh830pnmee8rjgrq.apps.googleusercontent.com";
+			google_client_id = optarg;
 			break;
 		case 'c':
 			pempath = optarg;
 			break;
 		case 'h':
-			httpport = strtol(optarg, NULL, 10);
+			httpport = strtol(optarg, &optrest, 10);
+			if(*optrest != '\0')
+				goto caseusage;
 			break;
 		case 's':
-			httpsport = strtol(optarg, NULL, 10);
+			httpsport = strtol(optarg, &optrest, 10);
+			if(*optrest != '\0')
+				goto caseusage;
 			break;
 		case 'd':
-			dnsport = strtol(optarg, NULL, 10);
+			dnsport = strtol(optarg, &optrest, 10);
+			if(*optrest != '\0')
+				goto caseusage;
 			break;
 		case 'r':
 			redirect = optarg;
 			break;
 		case 't':
-			nthreads = strtol(optarg, NULL, 10);
+			nthreads = strtol(optarg, &optrest, 10);
+			if(*optrest != '\0')
+				goto caseusage;
 			break;
 		default:
 		caseusage:
@@ -303,8 +324,6 @@ main(int argc, char ** argv)
 	evhtp_set_cb(https, "/keyval/", servekeyval, NULL);
 	evhtp_set_cb(https, "/tokensignin", servetokensignin, NULL);
 	//evhtp_set_parser_flags(https, EVHTP_PARSE_QUERY_FLAG_LENIENT);
-
-
 	evhtp_use_threads(https, NULL, nthreads, NULL);
 
 	char ciphers[] =

@@ -22,8 +22,8 @@ include libjson5.mk
 general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS) $(LIBEVENT_LIBS) $(LIBSSL_LIBS) $(LIBJSON5_LIBS)
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o city.o keyval.o $(LIBS)
 
-test_https: test_https.c
-	$(HOSTCC) -o $@ test_https.c -lcurl
+test_https: test_https.c nsec.c
+	$(HOSTCC) -o $@ test_https.c nsec.c -lcurl
 
 certs:
 	mkdir certs
@@ -40,8 +40,8 @@ certs/localhost.cert: certs/localhost.key certs/localhost.csr bin/openssl certs
 certs/localhost.pem: certs/localhost.cert certs/localhost.key certs
 	cat certs/localhost.key certs/localhost.cert > certs/localhost.pem
 
-test: general certs/localhost.pem test_https
-	(./general -c certs/localhost.pem & (sleep 1 && ./test_https -ph https://localhost:5443 ; echo ; kill $$!))
+test: general certs/localhost.pem test_https run-test.sh
+	./run-test.sh
 
 clean:
 	rm -rf general test_https *.o
