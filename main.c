@@ -251,7 +251,7 @@ servekeyval(evhtp_request_t *req, void *a)
 	default:
 	badrequest:
 		evhtp_headers_add_header(req->headers_out, evhtp_header_new("Content-Type", "text/plain", 1, 1));
-		evbuffer_add_printf(req->buffer_out, "bad request\n");
+		evbuffer_add(req->buffer_out, "bad request\n", 12);
 		evhtp_send_reply(req, 400);
 		return;
 	}

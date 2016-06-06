@@ -1,5 +1,10 @@
 #!/bin/bash
 
+numkeys=100
+if [ $# -gt 0 ]; then
+	numkeys=$1
+fi
+
 die(){
 	kill "$general"
 	wait >/dev/null 2>&1
@@ -12,7 +17,7 @@ general=$!
 
 sleep 1
 
-./test_https -f5 -l10 -n100 -ph https://localhost:5443
+./test_https -f5 -l10 -n$numkeys -ph https://localhost:5443
 status=$?
 
 die

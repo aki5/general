@@ -23,7 +23,7 @@ general: main.o servedns.o base64.o city.o keyval.o $(LIBC_LIBS) $(LIBEVHTP_LIBS
 	$(CC) $(LDFLAGS) -o $@ main.o servedns.o base64.o city.o keyval.o $(LIBS)
 
 test_https: test_https.c nsec.c
-	$(HOSTCC) -o $@ test_https.c nsec.c -lcurl
+	$(HOSTCC) $(CFLAGS) -o $@ test_https.c nsec.c -lcurl
 
 certs:
 	mkdir certs
