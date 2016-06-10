@@ -1,8 +1,12 @@
 
 UNAME := $(shell uname)
 HOSTCC := $(CC)
-CFLAGS=-Iinclude -Iinclude/evhtp -W -Wall -O2 -fomit-frame-pointer
-LDFLAGS=-Llib
+
+#SANITIZE=-fsanitize=address -fsanitize-coverage=edge
+CFLAGS=-Iinclude -Iinclude/evhtp -W -Wall -O2 -fomit-frame-pointer $(SANITIZE)
+LDFLAGS=-Llib $(SANITIZE)
+
+#clang -fsanitize-coverage=edge -fsanitize=address your_lib.cc fuzz_target.cc libFuzzer.a -o my_fuzzer
 
 ifeq ($(UNAME),Darwin)
 LIBS=-levhtp -levent -levent_openssl -lssl -lcrypto -lpthread -ljson5
@@ -50,6 +54,7 @@ distclean: clean
 	rm -rf lib bin include share ssl
 	rm -rf libevhtp/build
 	cd libevhtp && git checkout build/placeholder
+	make -C libjson5 clean || exit 0
 	make -C openssl clean && rm openssl/Makefile || exit 0
 	make -C libevent distclean || exit 0
 	make -C musl distclean || exit 0
